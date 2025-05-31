@@ -1,0 +1,50 @@
+# Rust specific
+**/target/
+**/*.rs.bk
+*.pdb
+
+# Git
+.git/
+.gitignore
+
+# Docker
+Dockerfile
+.dockerignore
+
+# IDE specific
+.vscode/
+.idea/
+**/*.swp
+**/*.swo
+
+# Documentation
+**/README.md
+**/CHANGELOG.md
+**/docs/
+
+# Tests
+**/tests/
+**/benches/
+
+# Dependencies
+**/node_modules/
+
+# Build artifacts
+**/*.o
+**/*.so
+**/*.dylib
+
+# Logs
+**/*.log
+**/logs/
+
+# Environment variables
+**/.env*
+**/*.env
+
+# Other workspace members
+/ws_client/
+
+# Development scripts and tools
+scripts/
+tools/ 

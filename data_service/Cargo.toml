@@ -1,0 +1,25 @@
+[package]
+name = "data-service"
+version = "0.1.0"
+edition = "2021"
+authors = ["MemeToken Team"]
+description = "A real-time data service for meme token trading platform"
+
+[dependencies]
+axum = { workspace = true }
+tower-http = { workspace = true }
+tokio = { workspace = true }
+tokio-stream = { workspace = true }
+futures = { workspace = true }
+async-stream = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow = { workspace = true }
+dashmap = { workspace = true }
+rust_decimal = { workspace = true }
+rand = { workspace = true }
+
+uuid = { workspace = true }
