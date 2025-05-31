@@ -1,5 +1,5 @@
 use crate::models::KLineInterval;
-use crate::services::KLineService;
+use crate::services::DataService;
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
@@ -18,7 +18,7 @@ pub struct KLineQuery {
 pub async fn get_klines(
     Path(symbol): Path<String>,
     Query(query): Query<KLineQuery>,
-    State(kline_service): State<Arc<KLineService>>,
+    State(data_service): State<Arc<DataService>>,
 ) -> Response {
     let interval = match KLineInterval::from_str(&query.interval) {
         Some(interval) => interval,
@@ -28,7 +28,7 @@ pub async fn get_klines(
     };
 
     let limit = query.limit.unwrap_or(100).min(1000);
-    let klines = kline_service.get_klines(&symbol, interval, limit);
+    let klines = data_service.get_klines(&symbol, interval, limit);
 
     Json(klines).into_response()
 }

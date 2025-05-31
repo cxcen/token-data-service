@@ -5,29 +5,39 @@ use dashmap::DashMap;
 use std::sync::Arc;
 use tokio::sync::broadcast;
 use tracing::info;
+use tokio::runtime::Runtime;
 
 const MAX_HISTORY: usize = 1000;
 const BROADCAST_CHANNEL_SIZE: usize = 1000;
 
-pub struct KLineService {
+pub struct DataService {
     klines: Arc<DashMap<(String, KLineInterval), Vec<KLine>>>,
     current_klines: Arc<DashMap<(String, KLineInterval), KLine>>,
-    tx: broadcast::Sender<KLine>,    
+    tx: broadcast::Sender<KLine>,
+    transaction_tx: broadcast::Sender<Transaction>,
 }
 
-impl KLineService {
+impl DataService {
     pub fn new() -> Self {
         let (tx, _) = broadcast::channel(BROADCAST_CHANNEL_SIZE);
+        let (transaction_tx, _) = broadcast::channel(BROADCAST_CHANNEL_SIZE);
         Self {
             klines: Arc::new(DashMap::new()),
             current_klines: Arc::new(DashMap::new()),
-            tx
+            tx,
+            transaction_tx,
         }
     }
 
     pub fn subscribe(&self) -> broadcast::Receiver<KLine> {
         let rx = self.tx.subscribe();
         info!("receiver_count {}", self.tx.receiver_count());
+        rx
+    }
+
+    pub fn subscribe_transactions(&self) -> broadcast::Receiver<Transaction> {
+        let rx = self.transaction_tx.subscribe();
+        info!("transaction_receiver_count {}", self.transaction_tx.receiver_count());
         rx
     }
 
@@ -46,7 +56,10 @@ impl KLineService {
     }
 
     pub fn process_transaction(&self, transaction: &Transaction) -> Result<()> {
-        info!("channle size {}", self.tx.len());
+        // Broadcast the transaction first
+        self.transaction_tx.send(transaction.clone())
+            .context("Failed to broadcast transaction")?;
+
         for interval in [
             KLineInterval::OneSecond,
             KLineInterval::OneMinute,
@@ -136,11 +149,10 @@ mod tests {
     use rust_decimal::Decimal;
 
     #[test]
-    fn test_kline_service() -> Result<()> {
-        let service = KLineService::new();
+    fn test_data_service() -> Result<()> {
+        let service = DataService::new();
         let symbol = "DOGE".to_string();
         
-        // Create a test transaction
         let transaction = Transaction::new(
             symbol.clone(),
             Decimal::new(100, 0),
@@ -148,12 +160,48 @@ mod tests {
             TradeSide::Buy,
         );
 
-        // Process the transaction
+        let mut transaction_rx = service.subscribe_transactions();
+        
+        let mut kline_rx = service.subscribe();
+
         service.process_transaction(&transaction)?;
 
-        // Verify KLine was created
-        let klines = service.get_klines(&symbol, KLineInterval::OneMinute, 1);
-        assert!(!klines.is_empty());
+        let rt = Runtime::new()?;
+        
+        rt.block_on(async {
+            if let Ok(received_transaction) = transaction_rx.recv().await {
+                assert_eq!(received_transaction.symbol, symbol);
+                assert_eq!(received_transaction.price, Decimal::new(100, 0));
+                assert_eq!(received_transaction.volume, Decimal::new(1, 0));
+                assert_eq!(received_transaction.side, TradeSide::Buy);
+            } else {
+                panic!("Failed to receive transaction");
+            }
+        });
+
+        rt.block_on(async {
+            let mut received_intervals = Vec::new();
+            
+            // We expect 5 intervals (1s, 1m, 5m, 15m, 1h)
+            for _ in 0..5 {
+                if let Ok(kline) = kline_rx.recv().await {
+                    assert_eq!(kline.symbol, symbol);
+                    assert_eq!(kline.open, Decimal::new(100, 0));
+                    assert_eq!(kline.high, Decimal::new(100, 0));
+                    assert_eq!(kline.low, Decimal::new(100, 0));
+                    assert_eq!(kline.close, Decimal::new(100, 0));
+                    assert_eq!(kline.volume, Decimal::new(1, 0));
+                    received_intervals.push(kline.interval);
+                }
+            }
+
+            assert!(received_intervals.contains(&KLineInterval::OneSecond));
+            assert!(received_intervals.contains(&KLineInterval::OneMinute));
+            assert!(received_intervals.contains(&KLineInterval::FiveMinutes));
+            assert!(received_intervals.contains(&KLineInterval::FifteenMinutes));
+            assert!(received_intervals.contains(&KLineInterval::OneHour));
+        });
+
         Ok(())
     }
 } 

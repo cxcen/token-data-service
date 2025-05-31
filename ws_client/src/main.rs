@@ -1,6 +1,6 @@
 use anyhow::Context;
 use futures_util::StreamExt;
-use data_service::models::KLine;
+use data_service::models::{KLine, Transaction};
 use serde::Deserialize;
 use std::env;
 use std::net::SocketAddr;
@@ -12,6 +12,11 @@ struct KLineData {
     typ: String,
     data: KLine,
 }
+#[derive(Debug, Deserialize)]
+struct TxData {
+    typ: String,
+    data: Transaction,
+}
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -22,7 +27,7 @@ async fn main() -> anyhow::Result<()> {
 
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
     let mut tasks = JoinSet::new();
-    for _ in 0..100 {
+    for _ in 0..10 {
         tasks.spawn(async move {
             let (mut socket, _response) =
                 tokio_tungstenite::connect_async(format!("ws://{addr}/ws/klines/DOGE/1m"))
@@ -35,8 +40,22 @@ async fn main() -> anyhow::Result<()> {
                         let data = serde_json::from_slice::<KLineData>(msg.as_ref());
                         println!("{:?}", data);
                     }
-                    Message::Ping(_) => {
-                        println!("Ping");
+                    _ => {}
+                }
+            }
+        });
+
+        tasks.spawn(async move {
+            let (mut socket, _response) =
+                tokio_tungstenite::connect_async(format!("ws://{addr}/ws/transactions/DOGE"))
+                    .await
+                    .unwrap();
+            loop {
+                let msg = socket.next().await.unwrap().unwrap();
+                match msg {
+                    Message::Text(msg) => {
+                        let data = serde_json::from_slice::<TxData>(msg.as_ref());
+                        println!("{:?}", data);
                     }
                     _ => {}
                 }

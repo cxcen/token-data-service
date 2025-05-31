@@ -1,40 +1,31 @@
-use crate::models::KLineInterval;
-use crate::services::KLineService;
-use anyhow::{Context, Result};
 use axum::{
-    extract::{Path, State, WebSocketUpgrade, ws::Utf8Bytes},
+    extract::{Path, State, WebSocketUpgrade},
     response::{IntoResponse, Response},
 };
 use futures::{sink::SinkExt, stream::StreamExt};
 use serde_json::json;
 use std::{sync::Arc, time::Duration};
 use tokio::{select, time};
+use crate::services::DataService;
 
 const PING_INTERVAL: Duration = Duration::from_secs(5);
 const PING_TIMEOUT: Duration = Duration::from_secs(10);
 
-pub async fn ws_kline_handler(
-    Path((symbol, interval)): Path<(String, String)>,
-    State(kline_service): State<Arc<KLineService>>,
+pub async fn ws_transaction_handler(
+    Path(symbol): Path<String>,
+    State(kline_service): State<Arc<DataService>>,
     ws: WebSocketUpgrade,
 ) -> Response {
-    let interval = match KLineInterval::from_str(&interval) {
-        Some(interval) => interval,
-        None => return (axum::http::StatusCode::BAD_REQUEST, "Invalid interval").into_response(),
-    };
-
-    let symbol = symbol.clone();
-    ws.on_upgrade(move |socket| handle_socket(socket, kline_service, symbol, interval))
+    ws.on_upgrade(move |socket| handle_transaction_socket(socket, kline_service, symbol))
 }
 
-async fn handle_socket(
+async fn handle_transaction_socket(
     socket: axum::extract::ws::WebSocket,
-    kline_service: Arc<KLineService>,
+    data_service: Arc<DataService>,
     symbol: String,
-    interval: KLineInterval,
 ) {
     let (mut sender, mut receiver) = socket.split();
-    let mut rx = kline_service.subscribe();
+    let mut rx = data_service.subscribe_transactions();
     let mut ping_interval = time::interval(PING_INTERVAL);
     let mut last_ping_time = None;
 
@@ -54,15 +45,15 @@ async fn handle_socket(
                 }
             }
 
-            // Handle K-line updates
-            Ok(kline) = rx.recv() => {
-                if kline.symbol == symbol && kline.interval == interval {
+            // Handle transaction updates
+            Ok(transaction) = rx.recv() => {
+                if transaction.symbol == symbol {
                     let msg = json!({
-                        "typ": "kline",
-                        "data": kline
+                        "typ": "transaction",
+                        "data": transaction
                     });
 
-                    if let Ok(text) = serde_json::to_string(&msg).context("Failed to serialize kline message") {
+                    if let Ok(text) = serde_json::to_string(&msg) {
                         let message = axum::extract::ws::Message::Text(text.into());
                         if sender.send(message).await.is_err() {
                             break;
@@ -73,7 +64,6 @@ async fn handle_socket(
 
             // Send periodic pings
             _ = ping_interval.tick() => {
-                // If we haven't received a pong since our last ping, disconnect
                 if last_ping_time.is_some() {
                     break;
                 }

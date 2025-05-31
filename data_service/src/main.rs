@@ -10,8 +10,9 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 mod api;
 mod models;
 mod services;
+mod websocket;
 
-use services::{KLineService, MockDataGenerator};
+use services::{DataService, MockDataGenerator};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -31,11 +32,11 @@ async fn main() -> Result<()> {
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
 
     // Initialize services
-    let kline_service = Arc::new(KLineService::new());
+    let data_service = Arc::new(DataService::new());
     let mock_generator = MockDataGenerator::default();
 
     // Start mock data generation
-    let kline_service_clone = kline_service.clone();
+    let kline_service_clone = data_service.clone();
     tokio::spawn(async move {
         let stream = mock_generator.generate_transaction_stream("DOGE".to_string(), 100);
         pin_mut!(stream);
@@ -65,10 +66,11 @@ async fn main() -> Result<()> {
     let router = Router::new()
         .route("/health", get(api::health_check))
         .route("/api/v1/klines/{symbol}", get(api::get_klines))
-        .route("/ws/klines/{symbol}/{interval}", get(api::ws_kline_handler))
+        .route("/ws/klines/{symbol}/{interval}", get(websocket::ws_kline_handler))
+        .route("/ws/transactions/{symbol}", get(websocket::ws_transaction_handler))
         .layer(cors)
         .layer(TraceLayer::new_for_http())
-        .with_state(kline_service);
+        .with_state(data_service);
 
     tracing::info!("Starting server at {}", addr);
 
