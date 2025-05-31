@@ -18,7 +18,7 @@ Dockerfile
 **/*.swo
 
 # Documentation
-**/README.md
+README.md
 **/CHANGELOG.md
 **/docs/
 
