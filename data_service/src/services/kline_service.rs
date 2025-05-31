@@ -7,7 +7,7 @@ use tokio::sync::broadcast;
 use tracing::info;
 
 const MAX_HISTORY: usize = 1000;
-const BROADCAST_CHANNEL_SIZE: usize = 100;
+const BROADCAST_CHANNEL_SIZE: usize = 1000;
 
 pub struct KLineService {
     klines: Arc<DashMap<(String, KLineInterval), Vec<KLine>>>,
@@ -17,7 +17,7 @@ pub struct KLineService {
 
 impl KLineService {
     pub fn new() -> Self {
-        let (tx, rx) = broadcast::channel(BROADCAST_CHANNEL_SIZE);
+        let (tx, _) = broadcast::channel(BROADCAST_CHANNEL_SIZE);
         Self {
             klines: Arc::new(DashMap::new()),
             current_klines: Arc::new(DashMap::new()),

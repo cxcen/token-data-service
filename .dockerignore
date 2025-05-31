@@ -42,9 +42,6 @@ Dockerfile
 **/.env*
 **/*.env
 
-# Other workspace members
-/ws_client/
-
 # Development scripts and tools
 scripts/
 tools/ 
